@@ -59,15 +59,25 @@ To give you some sense of what we want to create:
 
 Prerequisites:
 ```
-sudo apt-get install gcc-arm-none-eabi mtd-utils golang-1.10 fakeroot flex bison device-tree-compiler bc libssl-dev
+sudo apt-get install \
+	gcc-arm-none-eabi \
+	mtd-utils \
+	golang-1.10 \
+	fakeroot \
+	flex \
+	bison \
+	device-tree-compiler \
+	bc \
+	libssl-dev \
+	openssl \
 ```
 
 Clone:
 ```
 go get github.com/u-root/u-bmc
 cd ~/go/src/github.com/u-root/u-bmc
-git submodule init && git submodule update
-(cd linux/; ../linux-patches/apply.sh)
+make checkout
+make
 ```
 
 Setup:

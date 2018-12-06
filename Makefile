@@ -3,15 +3,20 @@
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file
 
+PWD := $(shell pwd)
 LEB := 65408
 ARCH ?= arm
 CROSS_COMPILE ?= arm-none-eabi-
-MAKE_JOBS ?= -j8
+MAKE_JOBS ?= -j`nproc`
 PLATFORM ?= quanta-f06-leopard-ddr3
 ROOT_DIR := $(shell dirname $(abspath $(lastword $(MAKEFILE_LIST))))
 # This is used to include garbage in the signing process to test verification
 # errors in the integration test. It should not be used for any real builds.
 TEST_EXTRA_SIGN ?= /dev/null
+GOPATH ?= $(PWD)/go
+GOBIN ?= $(GOPATH)/bin
+GO ?= go
+export GOPATH GOBIN
 
 .PHONY: sim linux-modules
 
@@ -19,12 +24,13 @@ flash.img: u-boot/u-boot-512.bin ubi.img
 	cat $^ > $@
 
 boot/signer/signer: boot/signer/main.go
-	go get ./boot/signer/
-	go build -o $@ ./boot/signer/
+	$(GO) get ./boot/signer/
+	$(GO) build -o $@ ./boot/signer/
 
 boot/loader/loader: boot/loader/main.go
-	go get ./boot/loader/
-	GOARM=5 GOARCH=$(ARCH) go build -ldflags="-s -w" -o $@ ./boot/loader/
+	echo $$GOPATH
+	$(GO) get ./boot/loader/
+	GOARM=5 GOARCH=$(ARCH) $(GO) build -ldflags="-s -w" -o $@ ./boot/loader/
 
 boot/keys/u-bmc.pub: boot/signer/signer boot/keys/u-bmc.key
 	# Run signer to make sure the pub file is created
@@ -140,11 +146,11 @@ sim: flash.sim.img
 	stty sane
 
 u-bmc:
-	go get
-	go build
+	$(GO) get
+	$(GO) build
 
 initramfs.cpio: u-bmc ssh_keys.pub $(shell find . -name \*.go -type f)
-	go generate ./config/
+	$(GO) generate ./config/
 	GOARM=5 GOARCH=$(ARCH) ./u-bmc -o "$@.tmp" -p "$(PLATFORM)"
 	mv "$@.tmp" "$@"
 
@@ -156,3 +162,12 @@ clean:
 	 module/*.o module/*.mod.c module/*.ko module/.*.cmd module/modules.order \
 	 module/Module.symvers config/ssh_keys.go config/version.go
 	\rm -fr root/ boot/modules/ module/.tmp_versions/ boot/out
+
+linux/.git:
+	git clone --depth 1 --single-branch --branch dev-4.18 https://github.com/openbmc/linux.git
+	cd linux ; ../linux-patches/apply.sh
+
+u-boot/.git:
+	git clone --depth 1 https://github.com/bluecmd/u-boot.git
+
+checkout: linux/.git u-boot/.git
