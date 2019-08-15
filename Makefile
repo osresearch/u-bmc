@@ -3,7 +3,8 @@
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file
 
-PLATFORM ?= quanta-f06-leopard-ddr3
+#PLATFORM ?= quanta-f06-leopard-ddr3
+PLATFORM ?= supermicro-x11ssh-f
 
 LEB := 65408
 CROSS_COMPILE ?= arm-none-eabi-
