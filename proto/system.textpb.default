@@ -1,11 +1,11 @@
 # Example configuration
 network {
-  hostname: "ubmc.example.com"
+  hostname: "ubmc.lowerlayer.nl"
   # vlan: 100
-  ipv4_address: "192.168.7.10/24"
+  ipv4_address: "192.168.10.10/24"
   # ipv6_address: "fd00::cafe/48"
   ipv4_route {
      destination: "0.0.0.0/0"
-     via: "192.168.7.1"
+     via: "192.168.10.2"
   }
 }
