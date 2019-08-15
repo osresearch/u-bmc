@@ -22,3 +22,6 @@ boot.elf: start.S platform_g4.S main.S data.o $(ROOT_DIR)/boot/boot-config.auto.
 
 boot.bin: boot.elf
 	$(OBJCOPY) --only-section=.text -O binary $< $@
+
+clean:
+	$(RM) boot.bin boot.elf data.o
