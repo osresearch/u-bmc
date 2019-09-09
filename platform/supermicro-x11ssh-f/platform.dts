@@ -45,7 +45,8 @@
 	status = "okay";
 	flash@0 {
 		status = "okay";
-		m25p,fast-read;
+		//m25p,fast-read;
+		m25p;
 		label = "bmc";
 #include "ubmc-flash-layout.dtsi"
 	};

@@ -343,6 +343,19 @@ set_MPLL:
     str r1, [r0]
 
 /* Debug - UART console message */
+#define CONFIG_DRAM_UART_TO_UART1
+#ifdef CONFIG_DRAM_UART_TO_UART1
+    ldr   r0, =0x1e78909c                        @ route UART5 to UART Port1, 2016.08.29
+    ldr   r1, =0x10000004
+    str   r1, [r0]
+
+    ldr   r0, =0x1e6e2084
+    ldr   r1, [r0]
+    mov   r2, #0xC0                              @ Enable pinmux of TXD1/RXD1
+    orr   r1, r1, r2, lsl #16
+    str   r1, [r0]
+#endif
+
     // Enable FIFO
     ldr r0, =0x1e784008
     mov r1, #0x1
@@ -3039,6 +3052,7 @@ spi_checksum_wait_0:
     mov r1, #0x0
     str r1, [r0]
 
+#ifdef CONFIG_FAST_SPI
     ldr r0, =0x1e620010                          @ set to fast read mode
     ldr r1, =0x000B0041
     str r1, [r0]
@@ -3098,6 +3112,7 @@ spi_cbr_end:
     ldr r0, =0x1e620010
     mov r1, #0x0
     str r1, [r0]
+#endif
 
 platform_exit4:
 
