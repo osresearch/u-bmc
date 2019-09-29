@@ -29,7 +29,7 @@ TEST_EXTRA_SIGN ?= /dev/null
 # The bootloader for ast2400 is something like 10KiB, and the DTB is 25 KiB.
 # Here we give the extra space a total of 100 KiB to have some space.
 EXTRA_BOOT_SPACE ?= 102400
-GIT_VERSION=$(shell (cd $(ABS_ROOT_DIR); git describe --tags --long))
+GIT_VERSION=$(shell (cd $(ABS_ROOT_DIR); git describe --tags --long --always))
 
 # This is to allow integration tests that build new root filesystems outside
 # of the source root
@@ -242,6 +242,10 @@ initramfs.cpio: u-bmc ssh_keys.pub config/config.go $(shell find $(ROOT_DIR)cmd 
 
 test:
 	go test $(TESTFLAGS) \
+		$(shell find */ -name \*.go | grep -v vendor | cut -f -1 -d '/' | sort -u | xargs -n1 -I{} echo ./{}/... | xargs)
+
+get:
+	go get -t $(GETFLAGS) \
 		$(shell find */ -name \*.go | grep -v vendor | cut -f -1 -d '/' | sort -u | xargs -n1 -I{} echo ./{}/... | xargs)
 
 vars:
