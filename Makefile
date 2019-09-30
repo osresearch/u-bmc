@@ -50,6 +50,30 @@ u-bmc:
 	go get
 	go build
 
+# Linux tree comes from the OpenBMC branch, not the official kernel.org
+LINUX_VERSION	:= f9e04c3
+LINUX_DIR	:= linux-$(LINUX_VERSION)
+LINUX_TAR	:= linux-$(LINUX_VERSION).tar.gz
+LINUX_URL	:= https://github.com/openbmc/linux/tarball/$(LINUX_VERSION)
+LINUX_HASH	:= 533e6a400c710eb7d3d0a18a9a46d7deac218af59de21e7b95bdcaef99c90e1d
+
+$(LINUX_TAR):
+	wget -O "$@" "$(LINUX_URL)"
+
+$(LINUX_DIR)/.valid: $(LINUX_TAR)
+	echo "$(LINUX_HASH)  $<" | sha256sum --check
+	mkdir -p "$(LINUX_DIR)"
+	tar xf "$<" --strip 1 -C "$(LINUX_DIR)"
+	touch "$@"
+
+$(LINUX_DIR)/.patched: $(LINUX_DIR)/.valid
+	cd $(LINUX_DIR) ; \
+	for patch in ../linux-patches/*.patch ; do \
+		echo "=> Applying `basename $$patch`" ; \
+		git apply "$$patch" || exit 1 ; \
+	done
+	touch "$@"
+
 boot/boot.bin: boot/zImage.boot boot/loader.cpio.gz boot/platform.dtb.boot boot/boot-config.auto.h $(shell find $(ROOT_DIR)platform/$(SOC)/ -name \*.S -type f) $(ROOT_DIR)platform/$(PLATFORM)/boot/config.h
 	make -C platform/$(SOC)/boot boot.bin PLATFORM=$(PLATFORM) CROSS_COMPILE=$(CROSS_COMPILE)
 	ln -sf ../platform/$(SOC)/boot/boot.bin $@
@@ -85,13 +109,15 @@ platform/ubmc-flash-layout.dtsi: boot/zImage.boot boot/loader.cpio.gz
 
 module/%.ko: $(shell find $(ROOT_DIR)module -name \*.c -type f) boot/zImage.boot
 	$(MAKE) $(MAKE_JOBS) \
-		-C linux/ O=build/boot/zImage.boot/ \
+		-C "$(LINUX_DIR)" \
+		O=build/boot \
 		CROSS_COMPILE=$(CROSS_COMPILE) \
-		ARCH=$(ARCH) M=$(ABS_ROOT_DIR)/module \
+		ARCH=$(ARCH) \
+		M=$(ABS_ROOT_DIR)/module \
 		modules
-	linux/build/boot/zImage.boot/scripts/sign-file sha256 \
-		linux/build/boot/zImage.boot/certs/signing_key.pem \
-		linux/build/boot/zImage.boot/certs/signing_key.x509 \
+	$(LINUX_DIR)/build/boot/scripts/sign-file sha256 \
+		$(LINUX_DIR)/build/boot/certs/signing_key.pem \
+		$(LINUX_DIR)/build/boot/certs/signing_key.x509 \
 		$@
 
 boot/loader.cpio.gz: boot/loader/loader boot/keys/u-bmc.pub module/bootlock.ko boot/kexec
@@ -108,33 +134,59 @@ boot/keys/u-bmc.key:
 	chmod 700 boot/keys/
 	openssl genrsa -out $@ 2048
 
-boot/zImage.%: platform/$(SOC)/linux.config.%
-	$(MAKE) $(MAKE_JOBS) \
-		-C linux/ O=build/$@/ \
-		CROSS_COMPILE=$(CROSS_COMPILE) KCONFIG_CONFIG="$(ABS_ROOT_DIR)$<" \
-		ARCH=$(ARCH) olddefconfig all
-	rm -f $<.old
-	cp linux/build/$@/arch/$(ARCH)/boot/zImage $@
-
-linux-menuconfig-%: platform/$(SOC)/linux.config.%
-	$(MAKE) $(MAKE_JOBS) \
-		-C linux/ O=build/$@/ \
+# Rebuild the Linux config from the one in the platform directory.
+# If you change $(SOC) it is probably best to blow away the Linux directory
+$(LINUX_DIR)/build/%/.config: platform/$(SOC)/linux.config.% $(LINUX_DIR)/.patched
+	@mkdir -p "$(dir $@)"
+	cp "$<" "$@"
+	$(MAKE) \
+		-C "$(LINUX_DIR)" \
+		O="../$(dir $@)" \
 		CROSS_COMPILE=$(CROSS_COMPILE) \
-		KCONFIG_CONFIG="$(ABS_ROOT_DIR)$<" \
+		ARCH=$(ARCH) \
+		olddefconfig
+
+boot/zImage.%: $(LINUX_DIR)/build/%/.config
+	$(MAKE) $(MAKE_JOBS) \
+		-C "$(LINUX_DIR)" \
+		O="../$(dir $<)" \
+		CROSS_COMPILE=$(CROSS_COMPILE) \
+		ARCH=$(ARCH) \
+		all
+	cp "$(dir $<)arch/$(ARCH)/boot/zImage" "$@"
+
+
+# Interactively edit a Linux config.  Don't forget to save it afterwards
+linux-menuconfig.%: $(LINUX_DIR)/build/%/.config
+	$(MAKE) $(MAKE_JOBS) \
+		-C "$(LINUX_DIR)" \
+		O="../$(dir $<)" \
+		CROSS_COMPILE=$(CROSS_COMPILE) \
 		ARCH=$(ARCH) \
 		menuconfig
 	rm -f $<.old
 
+# After editing the real .config file, run `make linux-saveconfig.full` to store the
+# default (stripped down) configuration file back into the source tree
+linux-saveconfig.%: $(LINUX_DIR)/build/%/.config
+	$(MAKE) $(MAKE_JOBS) \
+		-C "$(LINUX_DIR)" \
+		O="../$(dir $<)" \
+		CROSS_COMPILE=$(CROSS_COMPILE) \
+		ARCH=$(ARCH) \
+		savedefconfig
+	mv "$(dir $<)defconfig" "platform/$(SOC)/linux.config$(suffix $@)"
+
 integration/bzImage: integration/linux.config
 	$(MAKE) $(MAKE_JOBS) \
-		-C linux/ O=build/$@/ \
+		-C $(LINUX_DIR) O=build/$@/ \
 		KCONFIG_CONFIG="$(ABS_ROOT_DIR)$<"
 	rm -f $<.old
-	cp linux/build/$@/arch/x86/boot/bzImage $@
+	cp $(LINUX_DIR)/build/$@/arch/x86/boot/bzImage $@
 
 linux-integration-menuconfig: integration/linux.config
 	$(MAKE) $(MAKE_JOBS) \
-		-C linux/ O=build/$@/ \
+		-C $(LINUX_DIR)/ O=build/$@/ \
 		KCONFIG_CONFIG="$(ABS_ROOT_DIR)$<" \
 		menuconfig
 	rm -f $<.old
@@ -150,8 +202,8 @@ boot/%.dtb.boot.dummy: platform/$(PLATFORM)/%.dts platform/ubmc-flash-layout.dts
 		--dtb /dev/null > boot/boot-config.auto.h
 	cpp \
 		-nostdinc \
-		-I linux/arch/$(ARCH)/boot/dts/ \
-		-I linux/include \
+		-I $(LINUX_DIR)/arch/$(ARCH)/boot/dts/ \
+		-I $(LINUX_DIR)/include \
 		-I platform/ \
 		-I platform/$(PLATFORM)/boot/ \
 		-I boot/ \
@@ -170,8 +222,8 @@ boot/%.dtb.boot: platform/$(PLATFORM)/%.dts boot/%.dtb.boot.dummy
 	rm -f $@
 	cpp \
 		-nostdinc \
-		-I linux/arch/$(ARCH)/boot/dts/ \
-		-I linux/include \
+		-I $(LINUX_DIR)/arch/$(ARCH)/boot/dts/ \
+		-I $(LINUX_DIR)/include \
 		-I platform/ \
 		-I platform/$(PLATFORM)/boot/ \
 		-I boot/ \
@@ -190,8 +242,8 @@ boot/%.dtb.boot: platform/$(PLATFORM)/%.dts boot/%.dtb.boot.dummy
 boot/%.dtb.full: platform/$(PLATFORM)/%.dts boot/%.dtb.boot
 	cpp \
 		-nostdinc \
-		-I linux/arch/$(ARCH)/boot/dts/ \
-		-I linux/include \
+		-I $(LINUX_DIR)/arch/$(ARCH)/boot/dts/ \
+		-I $(LINUX_DIR)/include \
 		-I platform/ \
 		-I platform/$(PLATFORM)/boot/ \
 		-I boot/ \
