@@ -31,7 +31,7 @@ CONFIG_SECCOMP=y
 # CONFIG_ATAGS is not set
 CONFIG_ZBOOT_ROM_TEXT=0x0
 CONFIG_ZBOOT_ROM_BSS=0x0
-CONFIG_CMDLINE="earlyprintk=1 ubi.mtd=ubi root=ubi0:root rootfstype=ubifs init=/init dyndbg=\"file net/ncsi/* +p\" console=ttyS4,57600n8 rw"
+CONFIG_CMDLINE="earlyprintk=1 ubi.mtd=ubi root=ubi0:root rootfstype=ubifs init=/init dyndbg=\"file net/ncsi/* +p\" console=ttyS4,115200n8 rw"
 CONFIG_KEXEC=y
 CONFIG_FIRMWARE_MEMMAP=y
 CONFIG_JUMP_LABEL=y

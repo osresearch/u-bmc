@@ -33,7 +33,7 @@ CONFIG_SECCOMP=y
 # CONFIG_ATAGS is not set
 CONFIG_ZBOOT_ROM_TEXT=0x0
 CONFIG_ZBOOT_ROM_BSS=0x0
-CONFIG_CMDLINE="earlyprintk=1 rdinit=/loader ubi.mtd=ubi console=ttyS4,57600n8"
+CONFIG_CMDLINE="earlyprintk=1 rdinit=/loader ubi.mtd=ubi console=ttyS4,115200n8"
 CONFIG_KEXEC=y
 # CONFIG_SUSPEND is not set
 CONFIG_FIRMWARE_MEMMAP=y
