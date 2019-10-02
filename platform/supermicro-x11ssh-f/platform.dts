@@ -13,10 +13,10 @@
 	};
 	chosen {
 		stdout-path = "con:115200n8";
-#ifdef BOOTLOADER
+//#ifdef BOOTLOADER
 		linux,initrd-start = <CONFIG_INITRD_START>;
 		linux,initrd-end = <CONFIG_INITRD_END>;
-#endif
+//#endif
 	};
 
 	memory@40000000 {
@@ -68,7 +68,7 @@
 	status = "okay";
 };
 
-#ifndef BOOTLOADER
+//#ifndef BOOTLOADER
 &mac0 {
 	status = "okay";
 
@@ -104,4 +104,4 @@
  			     &pinctrl_vgahs_default &pinctrl_vgavs_default
 			     &pinctrl_ddcclk_default &pinctrl_ddcdat_default>;
 };
-#endif /* !BOOTLOADER */
+//#endif /* !BOOTLOADER */

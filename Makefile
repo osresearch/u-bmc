@@ -74,8 +74,13 @@ $(LINUX_DIR)/.patched: $(LINUX_DIR)/.valid
 	done
 	touch "$@"
 
-boot/boot.bin: boot/zImage.boot boot/loader.cpio.gz boot/platform.dtb.boot boot/boot-config.auto.h $(shell find $(ROOT_DIR)platform/$(SOC)/ -name \*.S -type f) $(ROOT_DIR)platform/$(PLATFORM)/boot/config.h
-	make -C platform/$(SOC)/boot boot.bin PLATFORM=$(PLATFORM) CROSS_COMPILE=$(CROSS_COMPILE)
+boot/boot.bin: boot/zImage.full initramfs.cpio.gz boot/platform.dtb.full boot/boot-config.auto.h $(shell find $(ROOT_DIR)platform/$(SOC)/ -name \*.S -type f) $(ROOT_DIR)platform/$(PLATFORM)/boot/config.h
+	make \
+		-C platform/$(SOC)/boot \
+		PLATFORM=$(PLATFORM) \
+		CROSS_COMPILE=$(CROSS_COMPILE) \
+		boot.bin \
+
 	ln -sf ../platform/$(SOC)/boot/boot.bin $@
 
 boot/kexec:
@@ -104,7 +109,7 @@ boot/keys/u-bmc.pub: boot/signer/signer boot/keys/u-bmc.key
 	echo | boot/signer/signer > /dev/null
 	touch boot/keys/u-bmc.pub
 
-platform/ubmc-flash-layout.dtsi: boot/zImage.boot boot/loader.cpio.gz
+platform/ubmc-flash-layout.dtsi: boot/zImage.full initramfs.cpio.gz
 	go run platform/cmd/flash-layout/main.go --extra $(EXTRA_BOOT_SPACE) $^ > $@
 
 module/%.ko: $(shell find $(ROOT_DIR)module -name \*.c -type f) boot/zImage.boot
@@ -146,7 +151,7 @@ $(LINUX_DIR)/build/%/.config: platform/$(SOC)/linux.config.% $(LINUX_DIR)/.patch
 		ARCH=$(ARCH) \
 		olddefconfig
 
-boot/zImage.%: $(LINUX_DIR)/build/%/.config
+boot/zImage.full: $(LINUX_DIR)/build/full/.config
 	$(MAKE) $(MAKE_JOBS) \
 		-C "$(LINUX_DIR)" \
 		O="../$(dir $<)" \
@@ -155,6 +160,10 @@ boot/zImage.%: $(LINUX_DIR)/build/%/.config
 		all
 	cp "$(dir $<)arch/$(ARCH)/boot/zImage" "$@"
 
+
+# Don't delete the .config files
+.PRECIOUS: $(LINUX_DIR)/build/full/.config
+.PRECIOUS: $(LINUX_DIR)/build/boot/.config
 
 # Interactively edit a Linux config.  Don't forget to save it afterwards
 linux-menuconfig.%: $(LINUX_DIR)/build/%/.config
@@ -191,7 +200,7 @@ linux-integration-menuconfig: integration/linux.config
 		menuconfig
 	rm -f $<.old
 
-boot/%.dtb.boot.dummy: platform/$(PLATFORM)/%.dts platform/ubmc-flash-layout.dtsi platform/$(PLATFORM)/boot/config.h boot/loader.cpio.gz
+boot/%.dtb.boot.dummy: platform/$(PLATFORM)/%.dts platform/ubmc-flash-layout.dtsi platform/$(PLATFORM)/boot/config.h initramfs.cpio.gz
 	# Construct the DTB first with dummy addresses, and then again with the real
 	# ones. This assumes the DTB does not grow, but since it's only addresses
 	# that should be fine.
@@ -213,11 +222,11 @@ boot/%.dtb.boot.dummy: platform/$(PLATFORM)/%.dts platform/ubmc-flash-layout.dts
 		$< \
 	| dtc -O dtb -o $@ -
 
-boot/%.dtb.boot: platform/$(PLATFORM)/%.dts boot/%.dtb.boot.dummy
+boot/%.dtb.boot: platform/$(PLATFORM)/%.dts boot/%.dtb.boot.dummy initramfs.cpio.gz
 	go run platform/cmd/boot-config/main.go \
 		--ram-start $(RAM_START) \
 		--ram-size $(RAM_SIZE) \
-		--initrd boot/loader.cpio.gz \
+		--initrd initramfs.cpio.gz \
 		--dtb $@.dummy > boot/boot-config.auto.h
 	rm -f $@
 	cpp \
@@ -278,7 +287,7 @@ root.ubifs.img: initramfs.cpio $(ROOT_DIR)boot/zImage.full $(ROOT_DIR)boot/signe
 	fakeroot sh -c "(cd root/; cpio -idv < ../$(<)) && \
 		cat root/bbin/bb $(TEST_EXTRA_SIGN) | \
 			$(ROOT_DIR)boot/signer/signer > root/bbin/bb.gpg && \
-		mkfs.ubifs -x zlib -r root -R0 -m 1 -e ${LEB} -c 2047 -o $(@)"
+		mkfs.ubifs -x zlib -r root -R0 -m 1 -e ${LEB} -c 1024 -o $(@)"
 
 ubi.img: root.ubifs.img $(ROOT_DIR)ubi.cfg
 	ubinize -vv -o ubi.img -m 1 -p64KiB $(ROOT_DIR)ubi.cfg
@@ -292,6 +301,9 @@ initramfs.cpio: u-bmc ssh_keys.pub config/config.go $(shell find $(ROOT_DIR)cmd 
 	GOARM=5 GOARCH=$(ARCH) ./u-bmc -o "$@.tmp" -p "$(PLATFORM)"
 	mv "$@.tmp" "$@"
 
+initramfs.cpio.gz: initramfs.cpio
+	gzip -9 < "$<" > "$@"
+
 test:
 	go test $(TESTFLAGS) \
 		$(shell find */ -name \*.go | grep -v vendor | cut -f -1 -d '/' | sort -u | xargs -n1 -I{} echo ./{}/... | xargs)
@@ -304,7 +316,7 @@ vars:
 	$(foreach var,$(.VARIABLES),$(info $(var)=$($(var))))
 
 clean:
-	\rm -f initramfs.cpio u-root \
+	\rm -f initramfs.cpio* u-root \
 	 flash.img flash.sim.img boot/boot-config.auto.h \
 	 root.ubifs.img boot/zImage* boot/platform.dtb* \
 	 ubi.img boot/loader/loader boot/signer/signer boot/loader.cpio.gz \
