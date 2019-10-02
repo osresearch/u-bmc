@@ -30,11 +30,15 @@ func (p *platform) InitializeGpio(g *bmc.GpioSystem) error {
 }
 
 func (p *platform) InitializeSystem() error {
+	if true {
+		log.Printf("platform/supermicro-x11ssh-f/pkg/platform: not initializing serial port")
+		return nil
+	}
+
 	// Configure UART routing:
 	// - Route UART2 to UART3
 	// TODO(bluecmd): Platform dependent
 	p.a.Mem().MustWrite32(0x1E789000+0x9c, 0x6<<22|0x4<<19)
-
 
 	// Unlock the SCU registers with the password
 	p.a.Mem().MustWrite32(aspeed.SCU_BASE+0x0, aspeed.SCU_PASSWORD)
