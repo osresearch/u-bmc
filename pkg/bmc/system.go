@@ -226,6 +226,8 @@ func StartupWithConfig(p Platform, c *config.Config) (error, chan error) {
 	fmt.Printf("Welcome to u-bmc version %s\n\n", c.Version.Version)
 	systemVersion.With(prometheus.Labels{"version": c.Version.Version}).Inc()
 
+	unix.Mount("/dev/mtdblock4", "/nvram", "jffs2", 0, "")
+
 	// Seed the non-crypto random generator using the crypto one (which is
 	// hardware based). The non-crypto generator is used for random back-off
 	// timers and such, while the crypto one is used for crypto keys.

@@ -207,31 +207,37 @@ boot/platform.dtb: platform/$(PLATFORM)/platform.dts
 
 root.squashfs: initramfs.cpio $(ROOT_DIR)boot/signer/signer $(ROOT_DIR)proto/system.textpb.default boot/keys/u-bmc.pub
 	rm -fr root/
-	mkdir -p root/root root/etc root/boot
-	# TOOD(bluecmd): Move to u-bmc system startup
-	echo "nameserver 2001:4860:4860::8888" > root/etc/resolv.conf
-	echo "nameserver 2606:4700:4700::1111" >> root/etc/resolv.conf
-	echo "nameserver 8.8.8.8" >> root/etc/resolv.conf
-	echo "::1 localhost" >> root/etc/hosts
-	#cp -v $(ROOT_DIR)boot/zImage.full root/boot/zImage-$(GIT_VERSION)
-	#cat $(ROOT_DIR)boot/zImage.full | $(ROOT_DIR)boot/signer/signer > root/boot/zImage-$(GIT_VERSION).gpg
-	#cp -v $(ROOT_DIR)boot/platform.dtb.full root/boot/platform-$(GIT_VERSION).dtb
-	#cat $(ROOT_DIR)boot/platform.dtb.full | $(ROOT_DIR)boot/signer/signer > root/boot/platform-$(GIT_VERSION).dtb.gpg
-	#ln -sf zImage-$(GIT_VERSION) root/boot/zImage
-	#ln -sf zImage-$(GIT_VERSION).gpg root/boot/zImage.gpg
-	#ln -sf platform-$(GIT_VERSION).dtb root/boot/platform.dtb
-	#ln -sf platform-$(GIT_VERSION).dtb.gpg root/boot/platform.dtb.gpg
-	cp -v $(ROOT_DIR)boot/keys/u-bmc.pub root/etc/
-	ln -sf bbin/bb.gpg root/init.gpg
-	mkdir root/config
-	cp $(ROOT_DIR)proto/system.textpb.default root/config/system.textpb
-	# Rewrite the symlink to a non-absolute to allow non-chrooted following.
-	# This is a workaround for the fact that the loader cannot chroot currently.
-	ln -sf bbin/bb root/init
-	fakeroot sh -c "(cd root/; cpio -idv < ../$(<)) && \
-		cat root/bbin/bb $(TEST_EXTRA_SIGN) | \
-			$(ROOT_DIR)boot/signer/signer > root/bbin/bb.gpg && \
-		mksquashfs root root.squashfs -all-root -noappend -comp zstd"
+	for subdir in root etc boot dev tmp go proc sys env nvram ; do \
+		mkdir -p root/$$subdir ; \
+	done
+	ln -sf ./nvram root/config
+	ln -sf ../nvram/resolv.conf root/etc/resolv.conf
+	ln -sf ../nvram/hosts.conf root/etc/hosts
+	-cpio -idv -D root < $<
+	mksquashfs \
+		root \
+		$@ \
+		-all-root \
+		-noappend \
+		-comp zstd \
+
+
+nvram.jffs2: initramfs.cpio proto/system.textpb.default boot/keys/u-bmc.pub
+	rm -rf nvram
+	mkdir nvram
+	echo "nameserver 2001:4860:4860::8888" > nvram/resolv.conf
+	echo "nameserver 2606:4700:4700::1111" >> nvram/resolv.conf
+	echo "nameserver 8.8.8.8" >> nvram/resolv.conf
+	echo "::1 localhost" >> nvram/hosts
+	cp $(ROOT_DIR)proto/system.textpb.default nvram/system.textpb
+	cp -v $(ROOT_DIR)boot/keys/u-bmc.pub nvram/
+	mkfs.jffs2 \
+		--pad=0x100000 \
+		--output "$@" \
+		--faketime \
+		--squash-uids \
+		--squash-perms \
+		--root nvram \
 
 flash.img: boot/boot.bin
 	( cat $^ ; perl -e 'print chr(0xFF)x1024 while 1' ) \
