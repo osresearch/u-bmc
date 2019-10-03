@@ -13,17 +13,20 @@ OBJCOPY := $(CROSS_COMPILE)objcopy
 
 data.o: \
 	data.S \
-	$(ROOT_DIR)/initramfs.cpio.gz \
+	$(ROOT_DIR)/root.squashfs \
 	$(ROOT_DIR)/boot/zImage.full \
-	$(ROOT_DIR)/boot/platform.dtb.full
-	(cd $(ROOT_DIR); $(CC) -c -o $(DIR)/$@ $(DIR)/$<)
+	$(ROOT_DIR)/boot/platform.dtb
+	( cd $(ROOT_DIR) ; $(CC) -c -o $(DIR)/$@ $(DIR)/$<)
 
-boot.elf: start.S platform_g4.S main.S data.o $(ROOT_DIR)/boot/boot-config.auto.h $(ROOT_DIR)/platform/$(PLATFORM)/boot/config.h 
+boot.elf: start.S platform_g4.S main.S data.o
 	$(CC) \
 		-Wl,--build-id=none \
 		-Wl,-T boot.ld \
 		-Wl,--no-dynamic-linker \
+		-MMD \
+		-MF .$(notdir $@).d \
 		-nostdlib \
+		-I. \
 		-I$(ROOT_DIR)/platform/$(PLATFORM)/boot/ \
 		-I$(ROOT_DIR)/boot \
 		-o $@ \
@@ -33,4 +36,6 @@ boot.bin: boot.elf
 	$(OBJCOPY) --only-section=.text -O binary $< $@
 
 clean:
-	$(RM) boot.bin boot.elf data.o
+	$(RM) boot.bin boot.elf data.o .*.d
+
+-include .*.d

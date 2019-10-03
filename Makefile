@@ -24,11 +24,6 @@ ABS_ROOT_DIR := $(shell dirname $(abspath $(lastword $(MAKEFILE_LIST))))/
 # This is used to include garbage in the signing process to test verification
 # errors in the integration test. It should not be used for any real builds.
 TEST_EXTRA_SIGN ?= /dev/null
-# Since the DTB needs to contains the partitions, and the bootloader contains
-# the DTB, we have to guess the size of the DTB + the bootloader ahead of time.
-# The bootloader for ast2400 is something like 10KiB, and the DTB is 25 KiB.
-# Here we give the extra space a total of 100 KiB to have some space.
-EXTRA_BOOT_SPACE ?= 102400
 GIT_VERSION=$(shell (cd $(ABS_ROOT_DIR); git describe --tags --long --always))
 
 # This is to allow integration tests that build new root filesystems outside
@@ -74,7 +69,9 @@ $(LINUX_DIR)/.patched: $(LINUX_DIR)/.valid
 	done
 	touch "$@"
 
-boot/boot.bin: boot/zImage.full initramfs.cpio.gz boot/platform.dtb.full boot/boot-config.auto.h $(shell find $(ROOT_DIR)platform/$(SOC)/ -name \*.S -type f) $(ROOT_DIR)platform/$(PLATFORM)/boot/config.h
+FORCE:
+
+boot/boot.bin: FORCE boot/zImage.full root.squashfs boot/platform.dtb
 	make \
 		-C platform/$(SOC)/boot \
 		PLATFORM=$(PLATFORM) \
@@ -90,12 +87,6 @@ boot/kexec:
 		sha256sum -c
 	chmod 755 boot/kexec
 
-flash.img: $(ROOT_DIR)boot/boot.bin ubi.img $(ROOT_DIR)platform/ubmc-flash-layout.dtsi
-	(( cat $<; perl -e 'print chr(0xFF)x1024 while 1' ) \
-		| dd bs=64k \
-			count=$(shell (grep SIZE= $(ROOT_DIR)platform/ubmc-flash-layout.dtsi | cut -f 2 -d =; echo ' / 65536') | xargs | bc) \
-			iflag=fullblock; cat ubi.img) > $@
-
 boot/signer/signer: boot/signer/main.go
 	go get ./boot/signer/
 	go build -o $@ ./boot/signer/
@@ -108,9 +99,6 @@ boot/keys/u-bmc.pub: boot/signer/signer boot/keys/u-bmc.key
 	# Run signer to make sure the pub file is created
 	echo | boot/signer/signer > /dev/null
 	touch boot/keys/u-bmc.pub
-
-platform/ubmc-flash-layout.dtsi: boot/zImage.full initramfs.cpio.gz
-	go run platform/cmd/flash-layout/main.go --extra $(EXTRA_BOOT_SPACE) $^ > $@
 
 module/%.ko: $(shell find $(ROOT_DIR)module -name \*.c -type f) boot/zImage.boot
 	$(MAKE) $(MAKE_JOBS) \
@@ -165,7 +153,7 @@ boot/zImage.full: $(LINUX_DIR)/build/full/.config
 .PRECIOUS: $(LINUX_DIR)/build/full/.config
 .PRECIOUS: $(LINUX_DIR)/build/boot/.config
 
-# Interactively edit a Linux config.  Don't forget to save it afterwards
+# Interactively edit a Linux config and save it back to the config
 linux-menuconfig.%: $(LINUX_DIR)/build/%/.config
 	$(MAKE) $(MAKE_JOBS) \
 		-C "$(LINUX_DIR)" \
@@ -173,6 +161,7 @@ linux-menuconfig.%: $(LINUX_DIR)/build/%/.config
 		CROSS_COMPILE=$(CROSS_COMPILE) \
 		ARCH=$(ARCH) \
 		menuconfig
+	$(MAKE) linux-saveconfig$(suffix $@)
 	rm -f $<.old
 
 # After editing the real .config file, run `make linux-saveconfig.full` to store the
@@ -200,55 +189,7 @@ linux-integration-menuconfig: integration/linux.config
 		menuconfig
 	rm -f $<.old
 
-boot/%.dtb.boot.dummy: platform/$(PLATFORM)/%.dts platform/ubmc-flash-layout.dtsi platform/$(PLATFORM)/boot/config.h initramfs.cpio.gz
-	# Construct the DTB first with dummy addresses, and then again with the real
-	# ones. This assumes the DTB does not grow, but since it's only addresses
-	# that should be fine.
-	go run platform/cmd/boot-config/main.go \
-		--ram-start $(RAM_START) \
-		--ram-size $(RAM_SIZE) \
-		--initrd /dev/null \
-		--dtb /dev/null > boot/boot-config.auto.h
-	cpp \
-		-nostdinc \
-		-I $(LINUX_DIR)/arch/$(ARCH)/boot/dts/ \
-		-I $(LINUX_DIR)/include \
-		-I platform/ \
-		-I platform/$(PLATFORM)/boot/ \
-		-I boot/ \
-		-DBOOTLOADER \
-		-undef \
-		-x assembler-with-cpp \
-		$< \
-	| dtc -O dtb -o $@ -
-
-boot/%.dtb.boot: platform/$(PLATFORM)/%.dts boot/%.dtb.boot.dummy initramfs.cpio.gz
-	go run platform/cmd/boot-config/main.go \
-		--ram-start $(RAM_START) \
-		--ram-size $(RAM_SIZE) \
-		--initrd initramfs.cpio.gz \
-		--dtb $@.dummy > boot/boot-config.auto.h
-	rm -f $@
-	cpp \
-		-nostdinc \
-		-I $(LINUX_DIR)/arch/$(ARCH)/boot/dts/ \
-		-I $(LINUX_DIR)/include \
-		-I platform/ \
-		-I platform/$(PLATFORM)/boot/ \
-		-I boot/ \
-		-DBOOTLOADER \
-		-undef \
-		-x assembler-with-cpp \
-		$< \
-	| dtc -O dtb -o $@.tmp -
-	# Verify that the size in fact didn't change
-	bash -c '[[ \
-		$$(stat --printf="%s" $@.tmp) == \
-		$$(stat --printf="%s" $@.dummy) ]]' || \
-		(echo DTB changed size, cannot continue! Please file a bug about this; exit 1)
-	mv $@.tmp $@
-
-boot/%.dtb.full: platform/$(PLATFORM)/%.dts boot/%.dtb.boot
+boot/platform.dtb: platform/$(PLATFORM)/platform.dts
 	cpp \
 		-nostdinc \
 		-I $(LINUX_DIR)/arch/$(ARCH)/boot/dts/ \
@@ -261,7 +202,7 @@ boot/%.dtb.full: platform/$(PLATFORM)/%.dts boot/%.dtb.boot
 		$< \
 	| dtc -O dtb -o $@ -
 
-root.ubifs.img: initramfs.cpio $(ROOT_DIR)boot/zImage.full $(ROOT_DIR)boot/signer/signer $(ROOT_DIR)boot/platform.dtb.full $(ROOT_DIR)proto/system.textpb.default
+root.squashfs: initramfs.cpio $(ROOT_DIR)boot/signer/signer $(ROOT_DIR)boot/platform.dtb $(ROOT_DIR)proto/system.textpb.default boot/keys/u-bmc.pub
 	rm -fr root/
 	mkdir -p root/root root/etc root/boot
 	# TOOD(bluecmd): Move to u-bmc system startup
@@ -269,14 +210,14 @@ root.ubifs.img: initramfs.cpio $(ROOT_DIR)boot/zImage.full $(ROOT_DIR)boot/signe
 	echo "nameserver 2606:4700:4700::1111" >> root/etc/resolv.conf
 	echo "nameserver 8.8.8.8" >> root/etc/resolv.conf
 	echo "::1 localhost" >> root/etc/hosts
-	cp -v $(ROOT_DIR)boot/zImage.full root/boot/zImage-$(GIT_VERSION)
-	cat $(ROOT_DIR)boot/zImage.full | $(ROOT_DIR)boot/signer/signer > root/boot/zImage-$(GIT_VERSION).gpg
-	cp -v $(ROOT_DIR)boot/platform.dtb.full root/boot/platform-$(GIT_VERSION).dtb
-	cat $(ROOT_DIR)boot/platform.dtb.full | $(ROOT_DIR)boot/signer/signer > root/boot/platform-$(GIT_VERSION).dtb.gpg
-	ln -sf zImage-$(GIT_VERSION) root/boot/zImage
-	ln -sf zImage-$(GIT_VERSION).gpg root/boot/zImage.gpg
-	ln -sf platform-$(GIT_VERSION).dtb root/boot/platform.dtb
-	ln -sf platform-$(GIT_VERSION).dtb.gpg root/boot/platform.dtb.gpg
+	#cp -v $(ROOT_DIR)boot/zImage.full root/boot/zImage-$(GIT_VERSION)
+	#cat $(ROOT_DIR)boot/zImage.full | $(ROOT_DIR)boot/signer/signer > root/boot/zImage-$(GIT_VERSION).gpg
+	#cp -v $(ROOT_DIR)boot/platform.dtb.full root/boot/platform-$(GIT_VERSION).dtb
+	#cat $(ROOT_DIR)boot/platform.dtb.full | $(ROOT_DIR)boot/signer/signer > root/boot/platform-$(GIT_VERSION).dtb.gpg
+	#ln -sf zImage-$(GIT_VERSION) root/boot/zImage
+	#ln -sf zImage-$(GIT_VERSION).gpg root/boot/zImage.gpg
+	#ln -sf platform-$(GIT_VERSION).dtb root/boot/platform.dtb
+	#ln -sf platform-$(GIT_VERSION).dtb.gpg root/boot/platform.dtb.gpg
 	cp -v $(ROOT_DIR)boot/keys/u-bmc.pub root/etc/
 	ln -sf bbin/bb.gpg root/init.gpg
 	mkdir root/config
@@ -287,10 +228,7 @@ root.ubifs.img: initramfs.cpio $(ROOT_DIR)boot/zImage.full $(ROOT_DIR)boot/signe
 	fakeroot sh -c "(cd root/; cpio -idv < ../$(<)) && \
 		cat root/bbin/bb $(TEST_EXTRA_SIGN) | \
 			$(ROOT_DIR)boot/signer/signer > root/bbin/bb.gpg && \
-		mkfs.ubifs -x zlib -r root -R0 -m 1 -e ${LEB} -c 1024 -o $(@)"
-
-ubi.img: root.ubifs.img $(ROOT_DIR)ubi.cfg
-	ubinize -vv -o ubi.img -m 1 -p64KiB $(ROOT_DIR)ubi.cfg
+		mksquashfs root root.squashfs -all-root -noappend -comp zstd"
 
 flash.sim.img: flash.img
 	( cat $^ ; perl -e 'print chr(0xFF)x1024 while 1' ) \
@@ -317,9 +255,9 @@ vars:
 
 clean:
 	\rm -f initramfs.cpio* u-root \
-	 flash.img flash.sim.img boot/boot-config.auto.h \
-	 root.ubifs.img boot/zImage* boot/platform.dtb* \
-	 ubi.img boot/loader/loader boot/signer/signer boot/loader.cpio.gz \
+	 flash.img flash.sim.img \
+	 boot/zImage* boot/platform.dtb* \
+	 boot/loader/loader boot/signer/signer boot/loader.cpio.gz \
 	 module/*.o module/*.mod.c module/*.ko module/.*.cmd module/modules.order \
 	 module/Module.symvers config/ssh_keys.go config/version.go
 	\rm -fr root/ boot/modules/ module/.tmp_versions/ boot/out

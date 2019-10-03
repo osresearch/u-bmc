@@ -105,12 +105,14 @@ _main:
 	ldr r11, =dtb_str
 	bl xfer
 
-	// Start DMA load of initrd
+#if 0
+	// Start DMA load of initrd (no longer used)
 	ldr r7,  =initrd_start
 	ldr r8,  =CONFIG_INITRD_START
 	ldr r9,  =initrd_size
 	ldr r11, =initrd_str
 	bl xfer
+#endif
 
 	ldr r11, =starting_str
 	mov  r9, #0

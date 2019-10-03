@@ -2,7 +2,6 @@
 /dts-v1/;
 
 #include "aspeed-g4.dtsi"
-#include "config.h"
 
 / {
 	model = "Supermicro X11 BMC";
@@ -13,10 +12,6 @@
 	};
 	chosen {
 		stdout-path = "con:115200n8";
-//#ifdef BOOTLOADER
-		linux,initrd-start = <CONFIG_INITRD_START>;
-		linux,initrd-end = <CONFIG_INITRD_END>;
-//#endif
 	};
 
 	memory@40000000 {
@@ -68,7 +63,6 @@
 	status = "okay";
 };
 
-//#ifndef BOOTLOADER
 &mac0 {
 	status = "okay";
 
@@ -104,4 +98,3 @@
  			     &pinctrl_vgahs_default &pinctrl_vgavs_default
 			     &pinctrl_ddcclk_default &pinctrl_ddcdat_default>;
 };
-//#endif /* !BOOTLOADER */

@@ -1,0 +1,25 @@
+partitions {
+	compatible = "fixed-partitions";
+	#address-cells = <1>;
+	#size-cells = <1>;
+
+	startup@0 {
+		reg = <0x00000000 0x00010000>;
+		label = "startup";
+	};
+
+	kernel@100000 {
+		reg = <0x00100000 0x00400000>;
+		label = "kernel";
+	};
+
+	root@500000 {
+		reg = <0x00500000 0x00A00000>;
+		label = "initrd";
+	};
+
+	nvram@f00000 {
+		reg = <0x00f00000 0x00100000>;
+		label = "nvram";
+	};
+};
