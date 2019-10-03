@@ -1,13 +1,15 @@
-diff --git a/arch/arm/boot/dts/aspeed-g4.dtsi b/arch/arm/boot/dts/aspeed-g4.dtsi
-index 3990aed25ee6..cf5d020caf12 100644
---- a/arch/arm/boot/dts/aspeed-g4.dtsi
-+++ b/arch/arm/boot/dts/aspeed-g4.dtsi
-@@ -66,7 +66,7 @@
+diff -u --recursive ./clean/openbmc-linux-f9e04c3/arch/arm/boot/dts/aspeed-g4.dtsi ./linux-f9e04c3/arch/arm/boot/dts/aspeed-g4.dtsi
+--- ./clean/openbmc-linux-f9e04c3/arch/arm/boot/dts/aspeed-g4.dtsi	2019-09-05 19:42:17.000000000 +0200
++++ ./linux-f9e04c3/arch/arm/boot/dts/aspeed-g4.dtsi	2019-10-03 10:45:01.939825239 +0200
+@@ -63,10 +63,10 @@
+ 			clocks = <&syscon ASPEED_CLK_AHB>;
+ 			status = "disabled";
+ 			interrupts = <19>;
++			spi-max-frequency = <20000000>;
  			flash@0 {
  				reg = < 0 >;
  				compatible = "jedec,spi-nor";
 -				spi-max-frequency = <50000000>;
-+				spi-max-frequency = <16000000>;
  				status = "disabled";
  			};
- 		};
+ 			flash@1 {
