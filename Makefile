@@ -40,6 +40,7 @@ include $(ROOT_DIR)platform/$(PLATFORM)/Makefile.inc
 include $(ROOT_DIR)platform/$(SOC)/Makefile.inc
 
 .PHONY: sim all linux-menuconfig-% test vars pebble
+FORCE:
 
 u-bmc:
 	go get
@@ -51,10 +52,6 @@ LINUX_DIR	:= linux-$(LINUX_VERSION)
 LINUX_TAR	:= linux-$(LINUX_VERSION).tar.gz
 LINUX_URL	:= https://github.com/openbmc/linux/tarball/$(LINUX_VERSION)
 LINUX_HASH	:= eebddffa96172faee3a47bc0004e95689ac4a97ade195719516e8134ed15a7e7
-
-# Make considers these files as intermediate files and removes them.
-# Tell make they are important.
-.SECONDARY: $(LINUX_DIR)/build/full/.config $(LINUX_DIR)/build/boot/.config
 
 $(LINUX_TAR):
 	wget -O "$@" "$(LINUX_URL)"
@@ -73,7 +70,6 @@ $(LINUX_DIR)/.patched: $(LINUX_DIR)/.valid
 	done
 	touch "$@"
 
-FORCE:
 
 boot/boot.bin: FORCE boot/zImage.full root.squashfs boot/platform.dtb
 	make \
@@ -237,7 +233,7 @@ root.squashfs: initramfs.cpio $(ROOT_DIR)boot/signer/signer $(ROOT_DIR)proto/sys
 			$(ROOT_DIR)boot/signer/signer > root/bbin/bb.gpg && \
 		mksquashfs root root.squashfs -all-root -noappend -comp zstd"
 
-flash.sim.img: flash.img
+flash.img: boot/boot.bin
 	( cat $^ ; perl -e 'print chr(0xFF)x1024 while 1' ) \
 		| dd bs=1M count=32 iflag=fullblock > $@
 
