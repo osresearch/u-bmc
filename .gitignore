@@ -30,3 +30,6 @@ vendor/**/.bb
 *.tar.gz
 linux-*
 *.gz
+.*.d
+*.squashfs
+*.jffs2
