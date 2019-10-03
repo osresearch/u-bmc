@@ -201,12 +201,15 @@ boot/platform.dtb: platform/$(PLATFORM)/platform.dts
 		-I platform/ \
 		-I platform/$(PLATFORM)/boot/ \
 		-I boot/ \
+		-MMD \
+		-MT "$@" \
+		-MF .$(notdir $@).d \
 		-undef \
 		-x assembler-with-cpp \
 		$< \
 	| dtc -O dtb -o $@ -
 
-root.squashfs: initramfs.cpio $(ROOT_DIR)boot/signer/signer $(ROOT_DIR)boot/platform.dtb $(ROOT_DIR)proto/system.textpb.default boot/keys/u-bmc.pub
+root.squashfs: initramfs.cpio $(ROOT_DIR)boot/signer/signer $(ROOT_DIR)proto/system.textpb.default boot/keys/u-bmc.pub
 	rm -fr root/
 	mkdir -p root/root root/etc root/boot
 	# TOOD(bluecmd): Move to u-bmc system startup
@@ -263,7 +266,7 @@ clean:
 	 boot/zImage* boot/platform.dtb* \
 	 boot/loader/loader boot/signer/signer boot/loader.cpio.gz \
 	 module/*.o module/*.mod.c module/*.ko module/.*.cmd module/modules.order \
-	 module/Module.symvers config/ssh_keys.go config/version.go
+	 module/Module.symvers config/ssh_keys.go config/version.go .*.d
 	\rm -fr root/ boot/modules/ module/.tmp_versions/ boot/out
 
 pebble:
@@ -277,3 +280,6 @@ run-ovmf:
 		-chardev socket,id=host,path=host.uart \
 		-serial chardev:host \
 		-net none
+
+
+-include .*.d

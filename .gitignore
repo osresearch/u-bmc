@@ -3,14 +3,14 @@ boot/keys
 boot/loader.cpio.gz
 boot/loader/loader
 boot/signer/signer
-boot/*.dtb.*
+boot/*.dtb*
 boot/zImage*
 boot/modules
 boot/boot.bin
 boot/boot-config.auto.h
 boot/kexec
 *.img
-.*.sw*
+**/.*.sw*
 root/
 integration/bzImage
 integration/serial/
@@ -31,6 +31,6 @@ vendor/**/.bb
 *.tar.gz
 linux-*
 *.gz
-.*.d
+**/.*.d
 *.squashfs
 *.jffs2
