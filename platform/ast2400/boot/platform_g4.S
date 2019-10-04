@@ -342,9 +342,10 @@ set_MPLL:
     and r1, r2, r1
     str r1, [r0]
 
-/* Debug - UART console message */
-#define CONFIG_DRAM_UART_TO_UART1
+/* Debug - UART console message on the serial port */
+#define CONFIG_DRAM_UART_TO_UART2
 #ifdef CONFIG_DRAM_UART_TO_UART1
+    // route the BMC debug uart5 to the COM1 DB9 on the backplane
     ldr   r0, =0x1e78909c                        @ route UART5 to UART Port1, 2016.08.29
     ldr   r1, =0x10000004
     str   r1, [r0]
@@ -353,6 +354,29 @@ set_MPLL:
     ldr   r1, [r0]
     mov   r2, #0xC0                              @ Enable pinmux of TXD1/RXD1
     orr   r1, r1, r2, lsl #16
+    str   r1, [r0]
+#endif
+#ifdef CONFIG_DRAM_UART_TO_UART2
+    // route the BMC debug uart5 to the COM2 header on the mainboard
+    // and enable the /dev/ttyS0 serial output from the x86 (BMC IO1?) on the DB9 (UART1?)
+    ldr   r0, =0x1e78909c // LPC Host Interface Control Register A (HICRA) p564
+    ldr   r1, =( 0 \
+	| (0x2 << 28)	/* Route IO2 to UART5 (sel5DW) */ \
+	| (0x3 <<  3)	/* Route UART5 to IO2 (sel2IO) */ \
+	| (0x0 << 16)	/* Route IO1 to UART1 (sel1DW) */ \
+	| (0x0 <<  0)	/* Route UART1 to IO1 (sel1IO) */ \
+	)
+    str   r1, [r0]
+
+    ldr   r0, =0x1e6e2084 // System Control Unit Multi-function pin control #2 (SCU84) p345
+    ldr   r1, [r0]
+    ldr   r2, =(0 \
+	| (1 << 31) /* Enable UART2 RXD1 */ \
+	| (1 << 30) /* Enable UART2 TXD1 */ \
+	| (1 << 23) /* Enable UART1 RXD1 */ \
+	| (1 << 22) /* Enable UART1 TXD1 */ \
+	)
+    orr   r1, r1, r2, lsl #0
     str   r1, [r0]
 #endif
 

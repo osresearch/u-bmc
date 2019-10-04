@@ -26,12 +26,13 @@ u-bmc sets out to improve this by offering an alternative built on modern techno
 # Support
 
 u-bmc is still in experimental stage and is currently only supporting
-BMCs based on ASPEED AST2400. Other BMC SOCs are planned, and if you want
-to contribute let us know.
+BMCs based on ASPEED AST2400 and AST2500. Other BMC SOCs are planned,
+and if you want to contribute let us know.
 
 Currently the supported boards are:
 - Open Compute Project: Quanta F06 Leopard DDR3
 - Aspeed AST2500 Evaluation Board
+- [Supermicro X11SSH family (-T, -F, -TF)](platform/supermicro-x11ssh-f/README.md)
 
 Planned boards are:
 - Nuvoton Poleg BMC NPCM7XX Evaluation Board
